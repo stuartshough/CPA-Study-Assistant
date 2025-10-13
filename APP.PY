@@ -2,7 +2,29 @@ python"""
 CPA Study Assistant - RAG-based Q&A System
 This code creates a study assistant that answers questions based on your CPA materials.
 """
+# Add new imports
+from langchain.chains import RetrievalQA
+from langchain_community.llms import HuggingFaceHub
+import os
 
+# Configuration (Add these)
+# Make sure to set the HUGGINGFACEHUB_API_TOKEN in your Railway/local environment variables
+HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACEHUB_API_TOKEN')
+LLM_REPO_ID = "google/flan-t5-large" # A simple, free model for RAG
+
+# Initialize LLM
+llm = None
+if HUGGINGFACE_TOKEN:
+    print("Initializing LLM...")
+    try:
+        llm = HuggingFaceHub(
+            repo_id=LLM_REPO_ID,
+            huggingfacehub_api_token=HUGGINGFACE_TOKEN,
+            model_kwargs={"temperature": 0.1, "max_length": 512}
+        )
+        print(f"✓ LLM Initialized ({LLM_REPO_ID})")
+    except Exception as e:
+        print(f"Error initializing LLM: {e}")
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
@@ -152,4 +174,5 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     print(f"\n🚀 Starting CPA Study Assistant on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
