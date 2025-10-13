@@ -1,4 +1,4 @@
-"""
+python"""
 CPA Study Assistant - RAG-based Q&A System
 This code creates a study assistant that answers questions based on your CPA materials.
 """
@@ -149,3 +149,7 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     print(f"\n🚀 Starting CPA Study Assistant on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
+    port = int(os.getenv('PORT', 5000))
+    print(f"\n🚀 Starting CPA Study Assistant on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
+
