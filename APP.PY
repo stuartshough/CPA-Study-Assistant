@@ -1,18 +1,32 @@
-python"""
-CPA Study Assistant - RAG-based Q&A System
-This code creates a study assistant that answers questions based on your CPA materials.
-"""
-# Add new imports
-from langchain.chains import RetrievalQA
-from langchain_community.llms import HuggingFaceHub
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 import os
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
 
-# Configuration (Add these)
-# Make sure to set the HUGGINGFACEHUB_API_TOKEN in your Railway/local environment variables
+# --- NEW IMPORTS FOR LLM AND RAG CHAIN ---
+from langchain.chains import RetrievalQA
+from langchain_community.llms import HuggingFaceHub 
+
+app = Flask(__name__, static_folder='static')
+CORS(app)  # Enable CORS for website integration
+
+# Configuration
+UPLOAD_FOLDER = 'Study_Materials'
+VECTOR_DB_PATH = 'vectorstore'
+
+# --- LLM CONFIGURATION (REQUIRES HUGGINGFACEHUB_API_TOKEN ENV VAR) ---
 HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACEHUB_API_TOKEN')
-LLM_REPO_ID = "google/flan-t5-large" # A simple, free model for RAG
+LLM_REPO_ID = "google/flan-t5-large" # Placeholder LLM
 
-# Initialize LLM
+# Initialize embeddings model (runs locally)
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+# Initialize LLM (used for generating the final answer)
 llm = None
 if HUGGINGFACE_TOKEN:
     print("Initializing LLM...")
@@ -24,29 +38,33 @@ if HUGGINGFACE_TOKEN:
         )
         print(f"✓ LLM Initialized ({LLM_REPO_ID})")
     except Exception as e:
-        print(f"Error initializing LLM: {e}")
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
-import os
-from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+        print(f"Error initializing LLM: {e}. Running in context-only mode.")
+else:
+    print("Warning: HUGGINGFACEHUB_API_TOKEN not set. Running in context-only mode.")
 
-app = Flask(__name__, static_folder='static')
-CORS(app)  # Enable CORS for website integration
-
-# Configuration
-UPLOAD_FOLDER = 'Study_Materials'
-VECTOR_DB_PATH = 'vectorstore'
-
-# Initialize embeddings model (runs locally, no API costs)
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
-
-# Initialize vector store
+# Initialize vector store (Global Variable)
 vectorstore = None
+
+# -------------------------------------------------------------------
+# --- VECTOR STORE LOADING LOGIC (CRITICAL FOR RAILWAY DEPLOYMENT) ---
+# -------------------------------------------------------------------
+
+def try_load_vectorstore():
+    """Attempts to load an existing, persistent vector store."""
+    global vectorstore
+    if os.path.exists(VECTOR_DB_PATH):
+        print(f"Loading existing vector store from {VECTOR_DB_PATH}...")
+        try:
+            vectorstore = Chroma(
+                persist_directory=VECTOR_DB_PATH,
+                embedding_function=embeddings
+            )
+            if vectorstore._collection.count() > 0:
+                print(f"✓ Pre-built vector store loaded with {vectorstore._collection.count()} entries.")
+                return True
+        except Exception as e:
+            print(f"Error loading vector store: {e}. Attempting to rebuild.")
+    return False
 
 
 def load_and_process_documents():
@@ -56,12 +74,10 @@ def load_and_process_documents():
     print("Loading study materials...")
     documents = []
     
-    # Check if folder exists
     if not os.path.exists(UPLOAD_FOLDER):
-        print(f"Warning: {UPLOAD_FOLDER} folder not found!")
+        print(f"Warning: {UPLOAD_FOLDER} folder not found! Cannot build vector store.")
         return
     
-    # Load PDF files
     pdf_count = 0
     for filename in os.listdir(UPLOAD_FOLDER):
         if filename.endswith('.pdf'):
@@ -74,12 +90,11 @@ def load_and_process_documents():
                 print(f"Loaded: {filename}")
             except Exception as e:
                 print(f"Error loading {filename}: {e}")
-    
+                
     if not documents:
         print("No documents loaded!")
         return
     
-    # Split documents into chunks
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
         chunk_overlap=200,
@@ -87,7 +102,6 @@ def load_and_process_documents():
     )
     splits = text_splitter.split_documents(documents)
     
-    # Create vector store
     vectorstore = Chroma.from_documents(
         documents=splits,
         embedding=embeddings,
@@ -107,7 +121,7 @@ def serve_frontend():
 
 @app.route('/api/ask', methods=['POST'])
 def ask_question():
-    """Main endpoint for asking questions"""
+    """Main endpoint for asking questions, now using LLM for synthesis"""
     try:
         data = request.json
         question = data.get('question')
@@ -118,31 +132,30 @@ def ask_question():
         if vectorstore is None:
             return jsonify({'error': 'Study materials not loaded yet. Please wait...'}), 500
         
-        # Search for relevant content
+        # Search for relevant content using the retriever
         retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-        docs = retriever.get_relevant_documents(question)
         
-        if not docs:
-            return jsonify({
-                'answer': 'I could not find relevant information in the study materials to answer this question.'
-            })
-        
-        # Combine the top results into an answer
-        answer_parts = []
-        for i, doc in enumerate(docs, 1):
-            content = doc.page_content.strip()
-            # Clean up the content
-            if len(content) > 500:
-                content = content[:500] + "..."
-            answer_parts.append(f"{content}")
-        
-        # Create a comprehensive answer
-        answer = "\n\n".join(answer_parts)
-        
-        # Add a header based on the question topic
-        if len(answer) > 100:
-            answer = f"Based on your CPA study materials:\n\n{answer}"
-        
+        if llm is None:
+            # Fallback: return raw context chunks if LLM is not available
+            docs = retriever.get_relevant_documents(question)
+            if not docs:
+                 return jsonify({
+                     'answer': 'I could not find relevant information in the study materials to answer this question. (LLM Disabled)'
+                 })
+
+            answer_parts = [doc.page_content.strip() for doc in docs]
+            answer = "⚠️ **LLM Disabled!** Retrieved Context:\n\n---\n\n" + "\n\n---\n\n".join(answer_parts)
+            
+        else:
+            # ⭐ New Logic: Use RetrievalQA Chain to retrieve context AND generate an answer ⭐
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever
+            )
+            result = qa_chain({"query": question})
+            answer = result['result']
+
         return jsonify({
             'answer': answer,
             'success': True
@@ -159,18 +172,18 @@ def health_check():
     return jsonify({
         'status': 'running', 
         'vectorstore_loaded': vectorstore is not None,
-        'materials_folder_exists': os.path.exists(UPLOAD_FOLDER)
+        'materials_folder_exists': os.path.exists(UPLOAD_FOLDER),
+        'llm_initialized': llm is not None
     })
 
 
 if __name__ == '__main__':
-    # Load study materials on startup
-    load_and_process_documents()
+    # 1. Attempt to load the pre-built vector store first (FAST startup)
+    if not try_load_vectorstore():
+        # 2. Only run the expensive rebuild if it fails (SLOW startup/first run)
+        load_and_process_documents()
     
     # Run server
-    port = int(os.getenv('PORT', 5000))
-    print(f"\n🚀 Starting CPA Study Assistant on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
     port = int(os.getenv('PORT', 5000))
     print(f"\n🚀 Starting CPA Study Assistant on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
