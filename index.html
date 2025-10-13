@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPA Study Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 900px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .chat-container {
+            padding: 30px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .question {
+            background: #f0f0f0;
+            padding: 15px 20px;
+            border-radius: 20px 20px 5px 20px;
+            margin-left: auto;
+            max-width: 80%;
+            display: inline-block;
+            float: right;
+            clear: both;
+        }
+
+        .question strong {
+            color: #667eea;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .answer {
+            background: #667eea;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 20px 20px 20px 5px;
+            max-width: 80%;
+            display: inline-block;
+            float: left;
+            clear: both;
+        }
+
+        .answer strong {
+            display: block;
+            margin-bottom: 5px;
+            opacity: 0.9;
+        }
+
+        .input-area {
+            padding: 20px 30px 30px;
+            background: #f9f9f9;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        #questionInput {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        #questionInput:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        #askButton {
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #askButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #askButton:active {
+            transform: translateY(0);
+        }
+
+        #askButton:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ff4444;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .clearfix::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 CPA Study Assistant</h1>
+            <p>Ask any CPA exam question and get instant answers from your study materials</p>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message clearfix">
+                <div class="answer">
+                    <strong>Assistant:</strong>
+                    Welcome! I'm your CPA study assistant. Ask me anything about accounting, auditing, tax, or business concepts. I'll search through your study materials to provide accurate answers.
+                </div>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Searching study materials...</p>
+        </div>
+
+        <div class="input-area">
+            <div class="error-message" id="errorMessage"></div>
+            <div class="input-group">
+                <input 
+                    type="text" 
+                    id="questionInput" 
+                    placeholder="Type your CPA question here..."
+                    autocomplete="off"
+                >
+                <button id="askButton">Ask Question</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const questionInput = document.getElementById('questionInput');
+        const askButton = document.getElementById('askButton');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // API endpoint - this will be automatically set by Railway
+        const API_URL = window.location.origin + '/api/ask';
+
+        async function askQuestion() {
+            const question = questionInput.value.trim();
+            
+            if (!question) {
+                showError('Please enter a question');
+                return;
+            }
+
+            // Disable input while processing
+            askButton.disabled = true;
+            questionInput.disabled = true;
+            loading.classList.add('active');
+            errorMessage.classList.remove('active');
+
+            // Add question to chat
+            addMessage('question', question);
+            questionInput.value = '';
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get response from server');
+                }
+
+                const data = await response.json();
+                
+                // Add answer to chat
+                addMessage('answer', data.answer);
+
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Sorry, there was an error processing your question. Please try again.');
+            } finally {
+                // Re-enable input
+                askButton.disabled = false;
+                questionInput.disabled = false;
+                loading.classList.remove('active');
+                questionInput.focus();
+            }
+        }
+
+        function addMessage(type, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message clearfix';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = type;
+            
+            const label = document.createElement('strong');
+            label.textContent = type === 'question' ? 'You:' : 'Assistant:';
+            
+            const text = document.createTextNode(' ' + content);
+            
+            contentDiv.appendChild(label);
+            contentDiv.appendChild(text);
+            messageDiv.appendChild(contentDiv);
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+            setTimeout(() => {
+                errorMessage.classList.remove('active');
+            }, 5000);
+        }
+
+        // Event listeners
+        askButton.addEventListener('click', askQuestion);
+        
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                askQuestion();
+            }
+        });
+
+        // Focus on input when page loads
+        window.addEventListener('load', () => {
+            questionInput.focus();
+        });
+    </script>
+</body>
+</html>
