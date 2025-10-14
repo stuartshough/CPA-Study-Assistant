@@ -1,16 +1,4 @@
-# requirements.txt
 flask
 flask-cors
-langchain
-langchain-community
-pydantic==1.10.13  # Pinning pydantic helps prevent dependency conflicts
-pypdf  # For PyPDFLoader
-chromadb  # For the Chroma vector store
-sentence-transformers  # For HuggingFaceEmbeddings
-# Add a popular LLM provider for the generation step:
-# Option A: OpenAI (best quality, requires API key)
-# openai
-# Option B: Anthropic (Claude, requires API key)
-# anthropic
-# Option C: HuggingFace (used in my example, requires API key)
-# huggingface-hub
+PyPDF2
+```
