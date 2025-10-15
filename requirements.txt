@@ -4,10 +4,4 @@ PyPDF2
 langchain
 langchain-community
 sentence-transformers
-chromadbflask
-flask-cors
-PyPDF2
-langchain
-langchain-community
-sentence-transformers
 chromadb
