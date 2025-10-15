@@ -1,4 +1,7 @@
 flask
 flask-cors
-PyPDF2
-```
+pypdf
+langchain
+langchain-community
+sentence-transformers
+chromadb
